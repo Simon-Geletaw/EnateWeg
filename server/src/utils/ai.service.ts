@@ -7,6 +7,23 @@ if (env.GEMINI_API_KEY) {
   gemini = new GoogleGenerativeAI(env.GEMINI_API_KEY);
 }
 
+const MODEL_TIMEOUT_MS = 120000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timer);
+        reject(error);
+      });
+  });
+}
+
 function extractJsonFromText(text: string): string {
   const trimmed = text.trim();
   const fencedMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
@@ -120,7 +137,11 @@ Format Requirements:
     for (const modelName of modelCandidates) {
       try {
         const model = gemini.getGenerativeModel({ model: modelName });
-        const response = await model.generateContent(prompt);
+        const response = await withTimeout(
+          model.generateContent(prompt),
+          MODEL_TIMEOUT_MS,
+          `AI request timed out for model ${modelName}`
+        );
         const content = response.response.text();
         if (!content) throw new Error('No content received from AI');
 

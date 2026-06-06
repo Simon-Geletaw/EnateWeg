@@ -1,8 +1,8 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../middleware/authenticate';
-import { query, queryOne } from '../config/database';
+import { query } from '../config/database';
 import { HealthReadingInput } from '../schemas';
-import { AppError } from '../middleware/errorHandler';
+import { generateAndPersistMealPlan } from '../services/planGeneration.service';
 
 export async function logHealthReading(req: AuthRequest, res: Response, next: NextFunction) {
   try {
@@ -16,19 +16,28 @@ export async function logHealthReading(req: AuthRequest, res: Response, next: Ne
     );
 
     let planUpdated = false;
+    let newPlanId: string | undefined;
     let messageEn = 'Reading recorded successfully';
     let messageAm = 'ንባብ በተሳካ ሁኔታ ተመዝግቧል';
 
     // Check if blood sugar is high (e.g., > 140 for fasting)
     if (data.reading_type === 'blood_sugar' && data.context === 'fasting' && data.value_mg_dl! > 140) {
-      planUpdated = true;
-      messageEn = 'Your fasting sugar is high. Your plan was adjusted to lower-glycemic meals.';
-      messageAm = 'የጾም ስኳርዎ ከፍተኛ ነው። ዕቅድዎ ዝቅተኛ ግሊሴሚክ ላላቸው ምግቦች ተስተካክሏል።';
-      
-      // We would normally call the AI generation here with tightened targets.
-      // For MVP, we mock the generation.
-      // e.g. await generatePlan(...)
-      await query(`UPDATE meal_plans SET trigger_reason = 'blood_sugar' WHERE user_id = $1 AND status = 'active'`, [userId]);
+      try {
+        const generated = await generateAndPersistMealPlan({
+          userId,
+          triggerReason: 'blood_sugar',
+          tightenForHighSugar: true,
+        });
+        planUpdated = true;
+        newPlanId = generated.planId;
+        messageEn = 'Your fasting sugar is high. Your plan was adjusted to lower-glycemic meals.';
+        messageAm = 'የጾም ስኳርዎ ከፍተኛ ነው። ዕቅድዎ ዝቅተኛ ግሊሴሚክ ላላቸው ምግቦች ተስተካክሏል።';
+      } catch (_generationError) {
+        // Reading is still valid; report that adaptive plan generation was skipped.
+        planUpdated = false;
+        messageEn = 'Reading recorded. High fasting sugar detected, but automatic plan adjustment failed.';
+        messageAm = 'ንባቡ ተመዝግቧል። የጾም ስኳር ከፍተኛ መሆን ተገኝቷል ግን የራስ-ሰር ዕቅድ ማስተካከያ አልተሳካም።';
+      }
     }
 
     res.status(201).json({
@@ -36,7 +45,7 @@ export async function logHealthReading(req: AuthRequest, res: Response, next: Ne
       value_mg_dl: data.value_mg_dl,
       status: planUpdated ? 'high' : 'normal',
       plan_updated: planUpdated,
-      new_plan_id: planUpdated ? 'dummy-new-plan-id' : undefined,
+      new_plan_id: newPlanId,
       message_en: messageEn,
       message_am: messageAm
     });

@@ -161,7 +161,12 @@ const swaggerOptions: swaggerJSDoc.Options = {
               additionalProperties: true,
             },
             requires_blood_sugar_tracking: { type: 'boolean' },
-            plan_id: { type: 'string' },
+            plan_id: { type: 'string', nullable: true, format: 'uuid' },
+            plan_generation_status: {
+              type: 'string',
+              enum: ['generated', 'failed'],
+              example: 'generated',
+            },
           },
           required: [
             'profile_version',
@@ -169,6 +174,7 @@ const swaggerOptions: swaggerJSDoc.Options = {
             'targets',
             'requires_blood_sugar_tracking',
             'plan_id',
+            'plan_generation_status',
           ],
         },
         IngredientSearchResponse: {
@@ -559,6 +565,111 @@ const swaggerOptions: swaggerJSDoc.Options = {
           responses: {
             '200': {
               description: 'Current meal plan summary',
+            },
+            '401': {
+              description: 'Unauthorized',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            '404': {
+              description: 'No active plan',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+          },
+        },
+      },
+      '/v1/meal-plans/current/weekly': {
+        get: {
+          tags: ['Meal Plans'],
+          summary: 'Get active weekly meal plan for calendar view',
+          security: [{ bearerAuth: [] }],
+          responses: {
+            '200': {
+              description: 'Active weekly meal plan with days, slots, meals, and items',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    properties: {
+                      plan_id: { type: 'string', format: 'uuid' },
+                      week_start: { type: 'string', format: 'date' },
+                      trigger_reason: { type: 'string' },
+                      generated_at: { type: 'string', format: 'date-time' },
+                      lifestyle: {
+                        type: 'object',
+                        nullable: true,
+                        additionalProperties: true,
+                      },
+                      days: {
+                        type: 'array',
+                        items: {
+                          type: 'object',
+                          properties: {
+                            day_id: { type: 'string', format: 'uuid' },
+                            date: { type: 'string', format: 'date' },
+                            day_kcal_target: { type: 'number', nullable: true },
+                            slots: {
+                              type: 'array',
+                              items: {
+                                type: 'object',
+                                properties: {
+                                  slot_id: { type: 'string', format: 'uuid' },
+                                  slot_type: {
+                                    type: 'string',
+                                    enum: ['breakfast', 'lunch', 'dinner', 'snack'],
+                                  },
+                                  slot_index: { type: 'integer' },
+                                  is_logged: { type: 'boolean' },
+                                  meal: {
+                                    type: 'object',
+                                    nullable: true,
+                                    properties: {
+                                      id: { type: 'string', format: 'uuid' },
+                                      name_en: { type: 'string', nullable: true },
+                                      name_am: { type: 'string', nullable: true },
+                                      source: { type: 'string', nullable: true },
+                                      total_kcal: { type: 'number', nullable: true },
+                                      items: {
+                                        type: 'array',
+                                        items: {
+                                          type: 'object',
+                                          properties: {
+                                            item_id: { type: 'string', format: 'uuid' },
+                                            ingredient_id: {
+                                              type: 'string',
+                                              format: 'uuid',
+                                              nullable: true,
+                                            },
+                                            ingredient_name_en: { type: 'string', nullable: true },
+                                            ingredient_name_am: { type: 'string', nullable: true },
+                                            quantity_g: { type: 'number', nullable: true },
+                                          },
+                                          required: ['item_id'],
+                                        },
+                                      },
+                                    },
+                                    required: ['id', 'items'],
+                                  },
+                                },
+                                required: ['slot_id', 'slot_type', 'slot_index', 'is_logged', 'meal'],
+                              },
+                            },
+                          },
+                          required: ['day_id', 'date', 'slots'],
+                        },
+                      },
+                    },
+                    required: ['plan_id', 'week_start', 'trigger_reason', 'generated_at', 'days'],
+                  },
+                },
+              },
             },
             '401': {
               description: 'Unauthorized',
