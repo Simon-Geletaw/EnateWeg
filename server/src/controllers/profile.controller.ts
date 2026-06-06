@@ -1,9 +1,111 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../middleware/authenticate';
 import { query, queryOne } from '../config/database';
-import { HealthProfileInput } from '../schemas';
+import { HealthProfileInput, UpdateUserInput } from '../schemas';
 import { calculateTargets } from '../utils/nutrition';
 import { AppError } from '../middleware/errorHandler';
+
+/**
+ * GET /v1/users/me
+ * Returns the authenticated user's account info plus a compact health summary
+ * (whether a profile exists, key targets, BMI, conditions).
+ */
+export async function getMe(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.id;
+
+    const user = await queryOne(
+      `SELECT id, phone_number, google_uid, full_name, preferred_lang, is_active, created_at, updated_at
+       FROM users WHERE id = $1`,
+      [userId]
+    );
+    if (!user) {
+      throw new AppError(404, 'NOT_FOUND', 'User not found', 'ተጠቃሚው አልተገኘም');
+    }
+
+    const profile = await queryOne(
+      `SELECT bmi, daily_kcal_target, protein_g_target, carb_g_target, fat_g_target,
+              sodium_mg_target, sugar_g_target, primary_goal, profile_version
+       FROM health_profiles WHERE user_id = $1`,
+      [userId]
+    );
+
+    const conditions = await query(
+      `SELECT c.code FROM user_conditions uc
+         JOIN medical_conditions c ON uc.condition_id = c.id
+       WHERE uc.user_id = $1`,
+      [userId]
+    );
+    const conditionCodes = conditions.map((c) => c.code);
+
+    const hasActivePlan = await queryOne(
+      `SELECT 1 FROM meal_plans WHERE user_id = $1 AND status = 'active' LIMIT 1`,
+      [userId]
+    );
+
+    res.json({
+      id: user.id,
+      phone_number: user.phone_number,
+      google_uid: user.google_uid,
+      full_name: user.full_name,
+      preferred_lang: user.preferred_lang,
+      is_active: user.is_active,
+      created_at: user.created_at,
+      updated_at: user.updated_at,
+      health_summary: {
+        has_profile: !!profile,
+        profile_version: profile?.profile_version ?? null,
+        bmi: profile?.bmi ?? null,
+        primary_goal: profile?.primary_goal ?? null,
+        targets: profile
+          ? {
+              kcal: profile.daily_kcal_target,
+              protein_g: profile.protein_g_target,
+              carb_g: profile.carb_g_target,
+              fat_g: profile.fat_g_target,
+              sodium_mg: profile.sodium_mg_target,
+              sugar_g: profile.sugar_g_target,
+            }
+          : null,
+        conditions: conditionCodes,
+        requires_blood_sugar_tracking:
+          conditionCodes.includes('diabetes_t1') || conditionCodes.includes('diabetes_t2'),
+        has_active_plan: !!hasActivePlan,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+/**
+ * PATCH /v1/users/me
+ * Updates the user's name and/or preferred language.
+ */
+export async function updateMe(req: AuthRequest, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user!.id;
+    const data = req.body as UpdateUserInput;
+
+    const updated = await query(
+      `UPDATE users SET
+         full_name = COALESCE($1, full_name),
+         preferred_lang = COALESCE($2, preferred_lang),
+         updated_at = NOW()
+       WHERE id = $3
+       RETURNING id, phone_number, full_name, preferred_lang, is_active, created_at, updated_at`,
+      [data.full_name ?? null, data.preferred_lang ?? null, userId]
+    );
+
+    if (updated.length === 0) {
+      throw new AppError(404, 'NOT_FOUND', 'User not found', 'ተጠቃሚው አልተገኘም');
+    }
+
+    res.json(updated[0]);
+  } catch (error) {
+    next(error);
+  }
+}
 
 export async function getHealthProfile(req: AuthRequest, res: Response, next: NextFunction) {
   try {

@@ -108,8 +108,57 @@ const swaggerOptions: swaggerJSDoc.Options = {
             },
           ],
         },
-        HealthProfileRequest: {
+        UpdateUserRequest: {
           type: 'object',
+          properties: {
+            full_name: { type: 'string', example: 'Tigist Bekele' },
+            preferred_lang: { type: 'string', enum: ['am', 'en'], example: 'en' },
+          },
+          description: 'Provide at least one field.',
+        },
+        UserResponse: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            phone_number: { type: 'string', example: '+251911223344' },
+            full_name: { type: 'string', example: 'Tigist Bekele' },
+            preferred_lang: { type: 'string', enum: ['am', 'en'] },
+            is_active: { type: 'boolean' },
+            created_at: { type: 'string', format: 'date-time' },
+            updated_at: { type: 'string', format: 'date-time' },
+          },
+        },
+        MeResponse: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            phone_number: { type: 'string', example: '+251911223344' },
+            google_uid: { type: 'string', nullable: true },
+            full_name: { type: 'string', example: 'Tigist Bekele' },
+            preferred_lang: { type: 'string', enum: ['am', 'en'] },
+            is_active: { type: 'boolean' },
+            created_at: { type: 'string', format: 'date-time' },
+            updated_at: { type: 'string', format: 'date-time' },
+            health_summary: {
+              type: 'object',
+              properties: {
+                has_profile: { type: 'boolean' },
+                profile_version: { type: 'integer', nullable: true },
+                bmi: { type: 'number', nullable: true, example: 27.6 },
+                primary_goal: { type: 'string', nullable: true },
+                targets: {
+                  type: 'object',
+                  nullable: true,
+                  additionalProperties: true,
+                },
+                conditions: { type: 'array', items: { type: 'string' }, example: ['diabetes_t2'] },
+                requires_blood_sugar_tracking: { type: 'boolean' },
+                has_active_plan: { type: 'boolean' },
+              },
+            },
+          },
+        },
+        HealthProfileRequest: {          type: 'object',
           properties: {
             sex: { type: 'string', enum: ['male', 'female', 'other'] },
             birth_year: { type: 'integer', example: 1995 },
@@ -447,18 +496,72 @@ const swaggerOptions: swaggerJSDoc.Options = {
       '/v1/users/me': {
         get: {
           tags: ['Profile'],
-          summary: 'Get current user details (not implemented)',
+          summary: 'Get current user details + health summary',
           security: [{ bearerAuth: [] }],
           responses: {
-            '501': { description: 'Not implemented' },
+            '200': {
+              description: 'Current user with health summary',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/MeResponse' },
+                },
+              },
+            },
+            '401': {
+              description: 'Unauthorized',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            '404': {
+              description: 'User not found',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
           },
         },
         patch: {
           tags: ['Profile'],
-          summary: 'Patch current user details (not implemented)',
+          summary: 'Update current user name / language',
           security: [{ bearerAuth: [] }],
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/UpdateUserRequest' },
+              },
+            },
+          },
           responses: {
-            '501': { description: 'Not implemented' },
+            '200': {
+              description: 'Updated user',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/UserResponse' },
+                },
+              },
+            },
+            '400': {
+              description: 'Validation error',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
+            '401': {
+              description: 'Unauthorized',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/ErrorResponse' },
+                },
+              },
+            },
           },
         },
       },

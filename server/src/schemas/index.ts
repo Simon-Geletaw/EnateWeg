@@ -29,6 +29,17 @@ export const refreshTokenSchema = z.object({
   refresh_token: z.string().min(1, 'Refresh token is required'),
 });
 
+// ─── User ──────────────────────────────────────────────────────────────
+
+export const updateUserSchema = z
+  .object({
+    full_name: z.string().min(2).max(120).optional(),
+    preferred_lang: z.enum(['am', 'en']).optional(),
+  })
+  .refine((data) => data.full_name !== undefined || data.preferred_lang !== undefined, {
+    message: 'Provide at least one of full_name or preferred_lang',
+  });
+
 // ─── Health Profile ────────────────────────────────────────────────────
 
 export const healthProfileSchema = z.object({
@@ -133,6 +144,7 @@ export const logWeightSchema = z.object({
 export type SendOtpInput = z.infer<typeof sendOtpSchema>;
 export type VerifyOtpInput = z.infer<typeof verifyOtpSchema>;
 export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
+export type UpdateUserInput = z.infer<typeof updateUserSchema>;
 export type HealthProfileInput = z.infer<typeof healthProfileSchema>;
 export type HealthProfilePatchInput = z.infer<typeof healthProfilePatchSchema>;
 export type LogMealInput = z.infer<typeof logMealSchema>;
