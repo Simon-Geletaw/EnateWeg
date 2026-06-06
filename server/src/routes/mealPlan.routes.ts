@@ -7,6 +7,7 @@ const router = Router();
 router.use(authenticate);
 
 router.get('/current', mealPlanController.getCurrentPlan);
+router.get('/current/weekly', mealPlanController.getCurrentWeeklyPlan);
 router.post('/generate', mealPlanController.generatePlan);
 
 export default router;

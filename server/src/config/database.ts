@@ -5,11 +5,16 @@
 import { Pool } from 'pg';
 import { env } from './env';
 
+const isLocalPostgres = /localhost|127\.0\.0\.1/i.test(env.DATABASE_URL);
+const shouldUseSsl = !isLocalPostgres || /sslmode=require/i.test(env.DATABASE_URL);
+
 export const pool = new Pool({
   connectionString: env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: false, // Required for Neon DB and many managed PostgreSQL providers
-  },
+  ssl: shouldUseSsl
+    ? {
+        rejectUnauthorized: false, // Required for Neon DB and many managed PostgreSQL providers
+      }
+    : false,
   max: 20,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000,

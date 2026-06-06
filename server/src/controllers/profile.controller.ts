@@ -4,6 +4,7 @@ import { query, queryOne } from '../config/database';
 import { HealthProfileInput, UpdateUserInput } from '../schemas';
 import { calculateTargets } from '../utils/nutrition';
 import { AppError } from '../middleware/errorHandler';
+import { generateAndPersistMealPlan } from '../services/planGeneration.service';
 
 /**
  * GET /v1/users/me
@@ -194,16 +195,29 @@ export async function upsertHealthProfile(
       await query(`INSERT INTO user_conditions (user_id, condition_id) VALUES ($1, $2)`, [userId, cid]);
     }
 
+    let planId: string | null = null;
+    let planGenerationStatus: 'generated' | 'failed' = 'failed';
+
+    try {
+      const generated = await generateAndPersistMealPlan({
+        userId,
+        triggerReason: existing ? 'profile_update' : 'initial',
+      });
+      planId = generated.planId;
+      planGenerationStatus = 'generated';
+    } catch (generationError) {
+      console.error('⚠️ Plan generation skipped after profile save:', generationError);
+    }
+
     const requiresSugarTracking = data.conditions.includes('diabetes_t1') || data.conditions.includes('diabetes_t2');
 
-    // In Phase 3 this will actually generate a plan.
-    // For now, we mock the plan ID.
     res.json({
       profile_version: newVersion,
       bmi: Number((data.current_weight_kg / ((data.height_cm / 100) * (data.height_cm / 100))).toFixed(1)),
       targets,
       requires_blood_sugar_tracking: requiresSugarTracking,
-      plan_id: 'dummy-plan-id'
+      plan_id: planId,
+      plan_generation_status: planGenerationStatus,
     });
   } catch (error) {
     next(error);
